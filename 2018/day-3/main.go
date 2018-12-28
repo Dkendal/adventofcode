@@ -3,23 +3,19 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
-var _ = fmt.Printf
-var _ = strconv.ParseInt
 var claimPattern = regexp.MustCompile(`^#(\d+) @ (\d+),(\d+): (\d+)x(\d+)$`)
 
 func check(e error) {
 	if e != nil {
 		panic(e)
 	}
-}
-
-type Rect struct {
-	xMin, yMin, xMax, yMax int
 }
 
 // P is a 2d vector
@@ -115,16 +111,16 @@ func parseClaim(str string) Claim {
 	}
 }
 
-func getClaims(file string) []Claim {
-	dat, err := os.Open(file)
-
-	defer dat.Close()
-
+func FileClaims(file string) []Claim {
+	r, err := os.Open(file)
+	defer r.Close()
 	check(err)
+	return ReadClaims(r)
+}
 
-	scan := bufio.NewScanner(dat)
-
+func ReadClaims(r io.Reader) []Claim {
 	var claims []Claim
+	scan := bufio.NewScanner(r)
 
 	for scan.Scan() {
 		line := scan.Text()
@@ -134,11 +130,86 @@ func getClaims(file string) []Claim {
 	return claims
 }
 
-IndexRectangles(claims []Claims) {
+func StringClaims(dat string) []Claim {
+	r := strings.NewReader(dat)
+	return ReadClaims(r)
+}
+
+func OverlappingArea(claims *[]Claim) int {
+	sum := 0
+	set := make(map[P]int)
+
+	for _, claim := range *claims {
+		xMin := claim.pos.x
+		yMin := claim.pos.y
+		xMax := claim.pos.x + claim.dim.x
+		yMax := claim.pos.y + claim.dim.y
+
+		for x := xMin; x < xMax; x++ {
+			for y := yMin; y < yMax; y++ {
+				p := P{x, y}
+				v := set[p]
+				set[p]++
+
+				if v == 1 {
+					sum++
+				}
+			}
+		}
+	}
+
+	return sum
+}
+
+func ValidClaims(claims *[]Claim) map[int]bool {
+	var (
+		valids        = make([]bool, len(*claims))
+		visitedPoints = make(map[P][]int)
+	)
+
+	for idx, claim := range *claims {
+		xMin := claim.pos.x
+		yMin := claim.pos.y
+		xMax := claim.pos.x + claim.dim.x
+		yMax := claim.pos.y + claim.dim.y
+
+		valids[idx] = true
+
+		for x := xMin; x < xMax; x++ {
+			for y := yMin; y < yMax; y++ {
+				p := P{x, y}
+				visitations, ok := visitedPoints[p]
+				visitations = append(visitations, idx)
+				visitedPoints[p] = visitations
+
+				if ok {
+					valids[visitations[0]] = false
+				}
+
+				if len(visitations) > 1 {
+					valids[idx] = false
+				}
+			}
+		}
+	}
+
+	output := make(map[int]bool)
+
+	for idx, ok := range valids {
+		if ok {
+			n := (*claims)[idx].number
+			output[n] = true
+		}
+	}
+
+	return output
 }
 
 func main() {
-	claims := getClaims("./input.txt")
+	claims := FileClaims("input.txt")
+	sum := OverlappingArea(&claims)
+	fmt.Printf("Part 1: %d\n", sum)
 
-	indexRectangles(claims)
+	valids := ValidClaims(&claims)
+	fmt.Printf("Part 2: %v\n", valids)
 }
