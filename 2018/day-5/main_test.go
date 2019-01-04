@@ -17,11 +17,19 @@ func TestOppisite(t *testing.T) {
 
 func TestPart1(t *testing.T) {
 	input := "dabAcCaCBAcCcaDA"
-
-	actual := Part1(input)
-
+	c := make(chan int)
+	go React(input, c)
+	actual := <-c
 	expected := 10
+	assertEqual(t, expected, actual)
+}
 
+func TestPart2(t *testing.T) {
+	input := "dabAcCaCBAcCcaDA"
+	c := make(chan int)
+	go ReduceReact(input, c)
+	actual := <-c
+	expected := 4
 	assertEqual(t, expected, actual)
 }
 
