@@ -26,14 +26,10 @@ const (
 	wake
 )
 
-type Interval struct {
-	t1, t2 time.Time
-}
-
 type Event struct {
 	ts     time.Time
 	action Action
-	dat    string
+	dat    int
 }
 
 func check(e error) {
@@ -42,7 +38,7 @@ func check(e error) {
 	}
 }
 
-func Solution(r io.Reader) string {
+func NewEvents(r io.Reader) []Event {
 	s := bufio.NewScanner(r)
 
 	var events []Event
@@ -53,8 +49,12 @@ func Solution(r io.Reader) string {
 		ts, e := time.Parse(timestampFormat, matches[1])
 		check(e)
 
+		if matches == nil {
+			panic(0)
+		}
+
 		var action Action
-		var dat string
+		var dat int
 
 		switch matches[2] {
 		case "falls asleep":
@@ -67,7 +67,9 @@ func Solution(r io.Reader) string {
 			if matches[4] != "begins shift" {
 				panic(0)
 			}
-			dat = matches[3]
+			var e error
+			dat, e = strconv.Atoi(matches[3])
+			check(e)
 			action = start
 		}
 
@@ -80,11 +82,13 @@ func Solution(r io.Reader) string {
 		return t1.Before(t2)
 	})
 
-	var id string
-	var t1, t2 int
-	counters := make(map[string]map[int]int)
+	return events
+}
 
-	for _, e := range events {
+func EachInterval(events *[]Event, fn func(id int, t1, t2 int)) {
+	var id, t1, t2 int
+
+	for _, e := range *events {
 		switch e.action {
 		case start:
 			id = e.dat
@@ -95,55 +99,89 @@ func Solution(r io.Reader) string {
 		case wake:
 			t2 = e.ts.Minute()
 
-			for i := t1; i < t2; i++ {
-				if counters[id] == nil {
-					counters[id] = make(map[int]int)
-				}
+			fn(id, t1, t2-1)
 
-				counters[id][i]++
+		default:
+			panic("unhandled case")
+		}
+	}
+}
+
+func NewForest(events []Event) map[int]*Node {
+	var m = make(map[int]*Node)
+
+	EachInterval(&events, func(id, t1, t2 int) {
+		node, ok := m[id]
+
+		if !ok {
+			node = &Node{}
+			m[id] = node
+		}
+
+		node.Insert(&Interval{t1, t2})
+	})
+
+	return m
+}
+
+func Part1(events []Event) int {
+	m := NewForest(events)
+
+	var id int
+	var maxSum int
+	for i, n := range m {
+		if maxSum < n.meta.sum {
+			maxSum = n.meta.sum
+			id = i
+		}
+	}
+
+	n := m[id]
+
+	var minute, maxCount int
+	for i := 0; i < 60; i++ {
+		count := n.Query(i)
+		if count > maxCount {
+			maxCount = count
+			minute = i
+		}
+	}
+
+	return id * minute
+}
+
+func Part2(events []Event) int {
+	m := NewForest(events)
+
+	var choice struct {
+		minute int
+		count  int
+		id     int
+	}
+
+	for id, node := range m {
+		for minute := 0; minute < 60; minute++ {
+			count := node.Query(minute)
+			if count > choice.count {
+				choice.count = count
+				choice.minute = minute
+				choice.id = id
 			}
 		}
 	}
 
-	var maxID string
-	var maxSum int
+	return choice.id * choice.minute
+}
 
-	for id, counter := range counters {
-		sumSum := 0
-
-		for _, sum := range counter {
-			sumSum += sum
-		}
-
-		if sumSum > maxSum {
-			maxID = id
-			maxSum = sumSum
-		}
-	}
-
-	var maxMinute int
-	var maxCount int
-	for minute, count := range counters[maxID] {
-
-		if maxCount > count {
-			continue
-		}
-
-		maxMinute = minute
-		maxCount = count
-	}
-
-	i, _ := strconv.Atoi(maxID)
-
-	return fmt.Sprintf("%d * %d = %d", i, maxMinute, i*maxMinute)
+func Solution(events []Event) (int, int) {
+	return Part1(events), Part2(events)
 }
 
 func main() {
-	f, e := os.Open("input.txt")
-
-	check(e)
-
-	sol := Solution(f)
-
-	fmt.Println(sol)
+	f, err := os.Open("input.txt")
+	check(err)
+	e := NewEvents(f)
+	part1, part2 := Solution(e)
+	fmt.Println(part1)
+	fmt.Println(part2)
 }
